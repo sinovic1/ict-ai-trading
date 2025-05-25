@@ -1,39 +1,35 @@
+import asyncio
 import logging
 import os
-import threading
-import time
-from flask import Flask
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import yfinance as yf
+from aiohttp import web
 
-# --- Config
+# --- Configuration
 API_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = int(os.getenv("OWNER_ID"))
-
 bot = Bot(token=API_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
-app = Flask(__name__)
-scheduler = BackgroundScheduler()
+scheduler = AsyncIOScheduler()
 
-# --- Market check logic
-def check_strategies():
+# --- Strategy Logic
+async def check_strategies():
     try:
         print("🔄 Checking market data...")
         data = yf.download("EURUSD=X", period="1d", interval="1m", progress=False)
-
         if not data.empty:
             last_close = data["Close"].iloc[-1]
             last_close_value = float(last_close)
 
-            if last_close_value > 1.09:  # Dummy ICT condition
-                strategies_used = ["Liquidity Grab", "Breaker Block"]
+            if last_close_value > 1.09:  # Dummy ICT signal condition
                 tp1 = last_close_value + 0.0015
                 tp2 = last_close_value + 0.0030
                 tp3 = last_close_value + 0.0050
                 sl = last_close_value - 0.0020
+                strategies_used = ["Liquidity Grab", "Breaker Block"]
 
                 msg = (
                     "<b>📡 ICT Strategy Signal</b>\n"
@@ -45,36 +41,40 @@ def check_strategies():
                     f"🛑 SL: <code>{sl:.5f}</code>\n"
                     f"🧠 Strategies: <i>{', '.join(strategies_used)}</i>"
                 )
-                bot.send_message(chat_id=OWNER_ID, text=msg)
+                await bot.send_message(chat_id=OWNER_ID, text=msg)
 
     except Exception as e:
         logging.error(f"❌ Error while checking EURUSD=X: {e}")
 
-# --- Start loop in thread
-def start_strategy_loop():
-    scheduler.add_job(check_strategies, "interval", minutes=1)
-    scheduler.start()
-
-# --- Telegram command
+# --- Bot command
 async def status_handler(message: types.Message):
     if message.from_user.id == OWNER_ID:
         await message.answer("✅ Bot is running and healthy.")
 
-@app.route("/")
-def home():
-    return "Bot is alive."
+# --- Health Check Server
+async def handle(request):
+    return web.Response(text="Bot is alive.")
 
-# --- Polling + loop thread
-def start_bot():
+app = web.Application()
+app.router.add_get("/", handle)
+
+# --- Startup
+async def main():
     logging.basicConfig(level=logging.INFO)
+    await bot.delete_webhook(drop_pending_updates=True)
     dp.message.register(status_handler, Command(commands=["status"]))
-    start_strategy_loop()
-    dp.run_polling(bot)
+    scheduler.add_job(check_strategies, "interval", minutes=1)
+    scheduler.start()
+
+    # Start bot and web server
+    await asyncio.gather(
+        dp.start_polling(bot),
+        web._run_app(app, port=8080)
+    )
 
 if __name__ == "__main__":
-    thread = threading.Thread(target=start_bot)
-    thread.start()
-    app.run(host="0.0.0.0", port=8080)
+    asyncio.run(main())
+
 
 
 
