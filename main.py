@@ -8,22 +8,26 @@ from flask import Flask
 import yfinance as yf
 import os
 
-API_TOKEN = os.getenv("BOT_TOKEN")
-OWNER_ID = os.getenv("OWNER_ID")
+# 🔐 Environment Variables
+API_TOKEN = os.getenv("BOT_TOKEN")  # Your Telegram bot token
+OWNER_ID = os.getenv("OWNER_ID")   # Your Telegram user ID
 
+# 🧠 Aiogram & Flask setup
 bot = Bot(token=API_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 scheduler = AsyncIOScheduler()
 app = Flask(__name__)
 
-# === ICT Strategy Checker ===
+# 📈 ICT strategy signal check
 async def check_strategies():
     try:
         print("🔄 Checking market data...")
         data = yf.download("EURUSD=X", period="1d", interval="1m")
+
         if not data.empty:
-            last_close = data["Close"].iloc[-1]  # This is a float now
-            if last_close > 1.09:  # Dummy ICT logic
+            last_close = data["Close"].iloc[-1]
+
+            if last_close > 1.09:  # Dummy condition (you can replace with real ICT logic)
                 msg = (
                     "📈 <b>ICT Strategy Signal</b>\n"
                     "Pair: EURUSD\n"
@@ -35,33 +39,35 @@ async def check_strategies():
     except Exception as e:
         logging.error(f"❌ Error while checking EURUSD=X: {e}")
 
+# ⏱️ APScheduler job wrapper
 def loop_checker():
     asyncio.run(check_strategies())
 
-# === Schedule signal checking ===
+# 📆 Add job to scheduler
 scheduler.add_job(loop_checker, "interval", minutes=1)
 
-# === Telegram command /status ===
+# 🧪 Bot command: /status
 async def status_handler(message: types.Message):
     if str(message.from_user.id) == str(OWNER_ID):
         await message.answer("✅ Bot is running and healthy.")
 
-# === Flask route to keep service alive ===
+# 🌐 Keep server alive on cloud
 @app.route("/")
 def home():
     return "Bot is alive."
 
-# === Main bot runner ===
+# 🚀 Main startup
 async def main():
     logging.basicConfig(level=logging.INFO)
     await bot.delete_webhook(drop_pending_updates=True)
-
     dp.message.register(status_handler, Command(commands=["status"]))
     scheduler.start()
     await dp.start_polling(bot)
 
+# 🎯 Entry point
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
