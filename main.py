@@ -8,8 +8,8 @@ from flask import Flask
 import yfinance as yf
 import os
 
-API_TOKEN = os.getenv("BOT_TOKEN")  # Set in your environment
-OWNER_ID = os.getenv("OWNER_ID")    # Set in your environment
+API_TOKEN = os.getenv("BOT_TOKEN")
+OWNER_ID = os.getenv("OWNER_ID")
 
 bot = Bot(token=API_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
@@ -22,8 +22,8 @@ async def check_strategies():
         print("🔄 Checking market data...")
         data = yf.download("EURUSD=X", period="1d", interval="1m")
         if not data.empty:
-            last_close = data["Close"].iloc[-1]  # ✅ FIX: get actual float
-            if last_close > 1.09:  # Dummy condition for testing
+            last_close = data["Close"].iloc[-1]  # This is a float now
+            if last_close > 1.09:  # Dummy ICT logic
                 msg = (
                     "📈 <b>ICT Strategy Signal</b>\n"
                     "Pair: EURUSD\n"
@@ -38,20 +38,20 @@ async def check_strategies():
 def loop_checker():
     asyncio.run(check_strategies())
 
-# === Scheduler ===
+# === Schedule signal checking ===
 scheduler.add_job(loop_checker, "interval", minutes=1)
 
-# === Telegram Command (/status) ===
+# === Telegram command /status ===
 async def status_handler(message: types.Message):
     if str(message.from_user.id) == str(OWNER_ID):
         await message.answer("✅ Bot is running and healthy.")
 
-# === Flask Route ===
+# === Flask route to keep service alive ===
 @app.route("/")
 def home():
     return "Bot is alive."
 
-# === Main Runner ===
+# === Main bot runner ===
 async def main():
     logging.basicConfig(level=logging.INFO)
     await bot.delete_webhook(drop_pending_updates=True)
@@ -62,6 +62,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
