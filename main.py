@@ -2,77 +2,62 @@ import asyncio
 import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
+from aiogram.filters import Command
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from datetime import datetime
-import yfinance as yf
 from flask import Flask
-import threading
+import yfinance as yf
+import os
 
-API_TOKEN = "7134641176:AAHtLDFCIvlnXVQgX0CHWhbgFUfRyuhbmXU"
-ALLOWED_USER_ID = 7469299312  # your Telegram ID
-FOREX_PAIRS = ["EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "AUDUSD=X", "USDCAD=X"]
+API_TOKEN = os.getenv("BOT_TOKEN")  # Set this in your environment
 
 bot = Bot(token=API_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 scheduler = AsyncIOScheduler()
-
 app = Flask(__name__)
 
-logging.basicConfig(level=logging.INFO)
-
-# --- ICT STRATEGY PLACEHOLDER ---
-def ict_strategy(data):
-    # Example ICT condition (simplified)
-    if data['Close'].iloc[-1] > data['Open'].iloc[-1]:  # Bullish candle
-        entry = round(data['Close'].iloc[-1], 5)
-        sl = round(entry - 0.0020, 5)
-        tp1 = round(entry + 0.0020, 5)
-        tp2 = round(entry + 0.0040, 5)
-        tp3 = round(entry + 0.0060, 5)
-        return True, entry, sl, tp1, tp2, tp3
-    return False, None, None, None, None, None
-
-async def check_ict_strategies():
-    for pair in FOREX_PAIRS:
-        data = yf.download(pair, period="1d", interval="15m")
-        if data.empty:
-            continue
-        signal, entry, sl, tp1, tp2, tp3 = ict_strategy(data)
-        if signal:
-            msg = (
-                f"📉 <b>ICT Signal for {pair.replace('=X','')}</b>\n"
-                f"Entry: <b>{entry}</b>\n"
-                f"SL: <b>{sl}</b>\n"
-                f"TP1: <b>{tp1}</b>\n"
-                f"TP2: <b>{tp2}</b>\n"
-                f"TP3: <b>{tp3}</b>"
-            )
-            await bot.send_message(ALLOWED_USER_ID, msg)
-
-@dp.message()
-async def handle_message(message: types.Message):
-    if message.from_user.id != ALLOWED_USER_ID:
-        return
-    if message.text.lower() == "/status":
-        await message.reply("✅ ICT Bot is running and healthy.")
+# Example strategy (replace with actual ICT logic)
+async def check_strategies():
+    try:
+        print("🔄 Checking market data...")
+        data = yf.download("EURUSD=X", period="1d", interval="1m")
+        if not data.empty:
+            last_close = data["Close"].iloc[-1]
+            if last_close > 1.09:  # Dummy signal
+                msg = (
+                    "📈 <b>ICT Strategy Signal</b>\n"
+                    "Pair: EURUSD\n"
+                    f"Entry: {last_close:.5f}\n"
+                    "TP1: +15 pips\nTP2: +30 pips\nTP3: +50 pips\n"
+                    "SL: -20 pips"
+                )
+                await bot.send_message(chat_id=os.getenv("OWNER_ID"), text=msg)
+    except Exception as e:
+        logging.error(f"Error while checking EURUSD=X: {e}")
 
 def loop_checker():
-    logging.info(f"🔄 ICT Bot checking market at {datetime.utcnow().isoformat()}")
-    asyncio.run(check_ict_strategies())
+    asyncio.run(check_strategies())
 
-@app.route('/')
+# Scheduler
+scheduler.add_job(loop_checker, "interval", minutes=1)
+
+# Telegram command
+async def status_handler(message: types.Message):
+    if str(message.from_user.id) == os.getenv("OWNER_ID"):
+        await message.answer("✅ Bot is running and healthy.")
+
+# Flask to keep the server alive
+@app.route("/")
 def home():
-    return "ICT Trading Bot is running."
+    return "Bot is alive."
 
-def run_flask():
-    app.run(host="0.0.0.0", port=8080)
+# Main entry point
+async def main():
+    logging.basicConfig(level=logging.INFO)
+    await bot.delete_webhook(drop_pending_updates=True)
 
-def main():
-    scheduler.add_job(loop_checker, "interval", minutes=1)
+    dp.message.register(status_handler, Command(commands=["status"]))
     scheduler.start()
-    threading.Thread(target=run_flask).start()
-    dp.run_polling(bot)
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    logging.info("✅ Webhook cleared")
-    main()
+    asyncio.run(main())
