@@ -26,7 +26,7 @@ async def check_strategies():
         data = yf.download("EURUSD=X", period="1d", interval="1m")
         if not data.empty:
             last_close = data["Close"].iloc[-1]
-            last_close_value = float(last_close)  # ✅ Safe float conversion
+            last_close_value = float(last_close)
 
             # Dummy signal logic
             if last_close_value > 1.09:
@@ -54,29 +54,31 @@ async def status_handler(message: types.Message):
     if message.from_user.id == OWNER_ID:
         await message.answer("✅ Bot is running and healthy.")
 
-# === Flask route to keep the app alive ===
+# === Flask keep-alive route ===
 @app.route("/")
 def home():
     return "Bot is alive."
 
-# === Aiogram bot loop in a thread ===
-async def start_bot():
+def run_flask():
+    app.run(host="0.0.0.0", port=8080)
+
+# === Main bot logic ===
+async def main():
     logging.basicConfig(level=logging.INFO)
     await bot.delete_webhook(drop_pending_updates=True)
 
-    # Register commands
     dp.message.register(status_handler, Command(commands=["status"]))
 
-    # Start scheduler
     scheduler.add_job(check_strategies, "interval", minutes=1)
     scheduler.start()
 
     await dp.start_polling(bot)
 
-# === Start everything ===
+# === Entry point ===
 if __name__ == "__main__":
-    Thread(target=lambda: asyncio.run(start_bot())).start()
-    app.run(host="0.0.0.0", port=8080)
+    Thread(target=run_flask, daemon=True).start()
+    asyncio.run(main())
+
 
 
 
