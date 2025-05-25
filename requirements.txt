@@ -3,6 +3,7 @@ yfinance
 pandas
 apscheduler
 Flask
+python-dotenv
 
 
 
