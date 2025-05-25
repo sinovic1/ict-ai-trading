@@ -1,9 +1,10 @@
 aiogram==3.1.1
 aiohttp
-python-dotenv
-flask
-apscheduler
+pandas
 yfinance
+python-dotenv
+apscheduler
+flask
 
 
 
