@@ -4,19 +4,17 @@ import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
-from aiogram.utils.markdown import hbold
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime
 from threading import Thread
 from flask import Flask
 import yfinance as yf
 
-# ✅ Load from environment variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = int(os.getenv("OWNER_ID"))
 
-# ✅ Bot setup
-bot = Bot(token=BOT_TOKEN, default=types.DefaultBotProperties(parse_mode=ParseMode.HTML))
+# ✅ Use the old way to set parse_mode
+bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 scheduler = AsyncIOScheduler()
 app = Flask(__name__)
@@ -25,11 +23,9 @@ last_signal_time = None
 last_signal_type = None
 
 def detect_buy_signal(data):
-    # Dummy ICT Buy Logic
     return data["Close"].iloc[-1] > data["Open"].iloc[-1]
 
 def detect_sell_signal(data):
-    # Dummy ICT Sell Logic
     return data["Close"].iloc[-1] < data["Open"].iloc[-1]
 
 async def check_strategies():
