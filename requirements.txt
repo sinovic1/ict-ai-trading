@@ -5,4 +5,6 @@ yfinance
 python-dotenv
 apscheduler
 flask
-pydantic==1.10.13
+pydantic==2.3.0
+
+
