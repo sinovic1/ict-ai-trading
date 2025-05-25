@@ -1,0 +1,4 @@
+aiogram==3.4.1
+apscheduler==3.10.4
+yfinance==0.2.40
+Flask==3.0.3
