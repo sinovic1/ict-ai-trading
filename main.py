@@ -1,106 +1,94 @@
 import asyncio
+import os
 import logging
-from aiogram import Bot, Dispatcher, types, F
+from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.utils.markdown import hbold
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from flask import Flask
+from datetime import datetime
 from threading import Thread
-import os
+from flask import Flask
 import yfinance as yf
 
-# === Load Secrets ===
+# ✅ Load from environment variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = int(os.getenv("OWNER_ID"))
 
-# === Setup Bot & Dispatcher ===
-bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
+# ✅ Bot setup
+bot = Bot(token=BOT_TOKEN, default=types.DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 scheduler = AsyncIOScheduler()
 app = Flask(__name__)
 
-# === Track Last Alert ===
-last_signal = None
+last_signal_time = None
+last_signal_type = None
 
-# === ICT STRATEGIES (DUMMY CHECKS) ===
-def ict_fvg(data):  # Fake example logic
+def detect_buy_signal(data):
+    # Dummy ICT Buy Logic
     return data["Close"].iloc[-1] > data["Open"].iloc[-1]
 
-def ict_choch(data):
-    return data["High"].iloc[-1] > data["High"].iloc[-2]
+def detect_sell_signal(data):
+    # Dummy ICT Sell Logic
+    return data["Close"].iloc[-1] < data["Open"].iloc[-1]
 
-def ict_bos(data):
-    return data["Low"].iloc[-1] < data["Low"].iloc[-2]
-
-def get_ict_signals(data):
-    signals = []
-    if ict_fvg(data): signals.append("FVG")
-    if ict_choch(data): signals.append("CHoCH")
-    if ict_bos(data): signals.append("BOS")
-    return signals
-
-# === Signal Generator ===
 async def check_strategies():
-    global last_signal
+    global last_signal_time, last_signal_type
     try:
-        logging.info("🔄 Checking market data...")
-        data = yf.download("EURUSD=X", period="1d", interval="1m", progress=False)
-        if data.empty: return
+        print("🔄 Checking market data...")
+        data = yf.download("EURUSD=X", period="1d", interval="1m")
+        if data.empty:
+            return
 
-        current_price = float(data["Close"].iloc[-1])
-        signals = get_ict_signals(data)
+        now = datetime.utcnow()
+        last_close = data["Close"].iloc[-1]
+        entry = float(last_close)
 
-        if len(signals) >= 2:
-            signal_id = f"{current_price:.5f}-{','.join(signals)}"
-            if signal_id == last_signal:
-                return  # ⛔ Prevent repeat
+        TP1 = round(entry + 0.0015, 5)
+        TP2 = round(entry + 0.0030, 5)
+        TP3 = round(entry + 0.0050, 5)
+        SL = round(entry - 0.0020, 5)
 
-            last_signal = signal_id
-            direction = "Buy" if data["Close"].iloc[-1] > data["Open"].iloc[-1] else "Sell"
+        signal_type = None
+        if detect_buy_signal(data):
+            signal_type = "Buy"
+        elif detect_sell_signal(data):
+            signal_type = "Sell"
 
-            tp1 = round(current_price + 0.0015, 5) if direction == "Buy" else round(current_price - 0.0015, 5)
-            tp2 = round(current_price + 0.0030, 5) if direction == "Buy" else round(current_price - 0.0030, 5)
-            tp3 = round(current_price + 0.0050, 5) if direction == "Buy" else round(current_price - 0.0050, 5)
-            sl = round(current_price - 0.0020, 5) if direction == "Buy" else round(current_price + 0.0020, 5)
+        if signal_type and (last_signal_type != signal_type or not last_signal_time or (now - last_signal_time).seconds > 300):
+            last_signal_type = signal_type
+            last_signal_time = now
 
             msg = (
-                f"📊 <b>{direction} Signal Detected</b>\n"
-                f"<b>Pair:</b> EURUSD\n"
-                f"<b>Entry:</b> {current_price:.5f}\n"
-                f"<b>TP1:</b> {tp1}\n"
-                f"<b>TP2:</b> {tp2}\n"
-                f"<b>TP3:</b> {tp3}\n"
-                f"<b>SL:</b> {sl}\n"
-                f"<b>Strategies Used:</b> {', '.join(signals)}"
+                f"<b>{signal_type} Signal Detected</b>\n"
+                f"Pair: EURUSD\n"
+                f"Entry: {entry:.5f}\n"
+                f"TP1: {TP1}\nTP2: {TP2}\nTP3: {TP3}\n"
+                f"SL: {SL}\n"
+                f"Strategies Used: ICT Logic"
             )
             await bot.send_message(chat_id=OWNER_ID, text=msg)
+
     except Exception as e:
         logging.error(f"❌ Error while checking EURUSD=X: {e}")
 
-# === Schedule job ===
-scheduler.add_job(check_strategies, "interval", minutes=1)
-
-# === Telegram Commands ===
-@dp.message(Command("status"))
-async def status(message: Message):
+@dp.message(Command(commands=["status"]))
+async def status_command(message: types.Message):
     if message.from_user.id == OWNER_ID:
-        await message.answer("✅ Bot is working fine.")
+        await message.answer("✅ Bot is running and healthy.")
 
-# === Flask keep-alive ===
 @app.route("/")
 def home():
-    return "Bot is live."
+    return "Bot is alive."
 
-# === Start Polling ===
 async def start_bot():
-    await bot.delete_webhook(drop_pending_updates=True)
     dp.include_router(dp)
+    scheduler.add_job(check_strategies, "interval", minutes=1)
+    scheduler.start()
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    scheduler.start()
     Thread(target=lambda: asyncio.run(start_bot())).start()
     app.run(host="0.0.0.0", port=8080)
 
