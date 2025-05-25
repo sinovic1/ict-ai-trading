@@ -1,10 +1,11 @@
 aiogram==3.1.1
-aiohttp
+aiohttp==3.8.6
 pandas
 yfinance
 python-dotenv
 apscheduler
 flask
 pydantic==2.3.0
+
 
 
