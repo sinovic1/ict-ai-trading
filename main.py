@@ -9,6 +9,7 @@ import pandas as pd
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
+from aiogram.client.default import DefaultBotProperties
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from flask import Flask
 from dotenv import load_dotenv
@@ -19,7 +20,8 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = int(os.getenv("OWNER_ID"))
 
-bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
+# ✅ Fix deprecated warning by using DefaultBotProperties
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 scheduler = AsyncIOScheduler()
 app = Flask(__name__)
@@ -98,7 +100,6 @@ async def status_handler(message: types.Message):
         await message.answer("✅ Bot is running and healthy.")
 
 async def start_bot():
-    dp.include_router(dp)
     scheduler.add_job(check_strategies, "interval", minutes=1)
     scheduler.start()
     await bot.delete_webhook(drop_pending_updates=True)
@@ -108,6 +109,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     Thread(target=lambda: asyncio.run(start_bot())).start()
     app.run(host="0.0.0.0", port=8080)
+
 
 
 
